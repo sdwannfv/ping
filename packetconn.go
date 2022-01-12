@@ -14,6 +14,7 @@ type packetConn interface {
 	Close() error
 	ICMPRequestType() icmp.Type
 	ReadFrom(b []byte) (n int, ttl int, src net.Addr, err error)
+	ReadFromTimeStamp(b []byte) (n int, ttl int, timeStamp time.Time, src net.Addr, err error)
 	SetFlagTTL() error
 	SetReadDeadline(t time.Time) error
 	WriteTo(b []byte, dst net.Addr) (int, error)
@@ -61,6 +62,7 @@ func (c *icmpv4Conn) SetFlagTTL() error {
 	if runtime.GOOS == "windows" {
 		return nil
 	}
+	err = c.c.IPv4PacketConn().SetControlMessage(ipv4.FlagTimeStamp, true)
 	return err
 }
 
@@ -71,6 +73,17 @@ func (c *icmpv4Conn) ReadFrom(b []byte) (int, int, net.Addr, error) {
 		ttl = cm.TTL
 	}
 	return n, ttl, src, err
+}
+
+func (c *icmpv4Conn) ReadFromTimeStamp(b []byte) (int, int, time.Time, net.Addr, error) {
+	var ttl int
+	var timeStamp time.Time
+	n, cm, src, err := c.c.IPv4PacketConn().ReadFrom(b)
+	if cm != nil {
+		ttl = cm.TTL
+		timeStamp = cm.Tv
+	}
+	return n, ttl, timeStamp, src, err
 }
 
 func (c icmpv4Conn) ICMPRequestType() icmp.Type {
@@ -96,6 +109,16 @@ func (c *icmpV6Conn) ReadFrom(b []byte) (int, int, net.Addr, error) {
 		ttl = cm.HopLimit
 	}
 	return n, ttl, src, err
+}
+
+func (c *icmpV6Conn) ReadFromTimeStamp(b []byte) (int, int, time.Time, net.Addr, error) {
+	var ttl int
+	var timeStamp time.Time
+	n, cm, src, err := c.c.IPv6PacketConn().ReadFrom(b)
+	if cm != nil {
+		ttl = cm.HopLimit
+	}
+	return n, ttl, timeStamp, src, err
 }
 
 func (c icmpV6Conn) ICMPRequestType() icmp.Type {

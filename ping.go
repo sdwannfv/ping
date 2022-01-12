@@ -208,9 +208,10 @@ type Pinger struct {
 }
 
 type packet struct {
-	bytes  []byte
-	nbytes int
-	ttl    int
+	bytes     []byte
+	nbytes    int
+	ttl       int
+	timeStamp time.Time
 }
 
 // Packet represents a received and processed ICMP echo packet.
@@ -587,7 +588,7 @@ func (p *Pinger) recvICMP(
 			}
 			var n, ttl int
 			var err error
-			n, ttl, _, err = conn.ReadFrom(bytes)
+			n, ttl, recvTime, _, err := conn.ReadFromTimeStamp(bytes)
 			if err != nil {
 				if neterr, ok := err.(*net.OpError); ok {
 					if neterr.Timeout() {
@@ -602,7 +603,7 @@ func (p *Pinger) recvICMP(
 			select {
 			case <-p.done:
 				return nil
-			case recv <- &packet{bytes: bytes, nbytes: n, ttl: ttl}:
+			case recv <- &packet{bytes: bytes, nbytes: n, ttl: ttl, timeStamp: recvTime}:
 			}
 		}
 	}
@@ -674,7 +675,11 @@ func (p *Pinger) processPacket(recv *packet) error {
 		}
 
 		timestamp := bytesToTime(pkt.Data[:timeSliceLength])
-		inPkt.Rtt = receivedAt.Sub(timestamp)
+		if recv.timeStamp.Unix() == 0 {
+			inPkt.Rtt = receivedAt.Sub(timestamp)
+		} else {
+			inPkt.Rtt = recv.timeStamp.Sub(timestamp)
+		}
 		inPkt.Seq = pkt.Seq
 		// If we've already received this sequence, ignore it.
 		if _, inflight := p.awaitingSequences[*pktUUID][pkt.Seq]; !inflight {
